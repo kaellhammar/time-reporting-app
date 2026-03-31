@@ -10,8 +10,15 @@ import expensesRouter from './routes/expenses';
 
 const app = express();
 
+const allowedOrigins = [
+  'http://localhost:5173',
+  'http://localhost:4173',
+  'https://frontend-production-59c3.up.railway.app',
+  process.env.FRONTEND_URL,
+].filter(Boolean);
+
 app.use(cors({
-  origin: ['http://localhost:5173', 'http://localhost:4173'],
+  origin: allowedOrigins,
   credentials: true,
 }));
 
