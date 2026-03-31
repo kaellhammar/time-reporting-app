@@ -106,8 +106,8 @@ export function initDb(): void {
     db.prepare(`
       INSERT INTO users (name, email, password_hash, role, employee_number)
       VALUES (?, ?, ?, 'admin', 'ADM001')
-    `).run(['Admin', 'admin@kaellhammarone.se', hash]);
-    console.log('Seeded default admin: admin@kaellhammarone.se / admin123');
+    `).run(['Admin', 'admin@kaellhammarone.com', hash]);
+    console.log('Seeded default admin: admin@kaellhammarone.com / admin123');
   }
 }
 
