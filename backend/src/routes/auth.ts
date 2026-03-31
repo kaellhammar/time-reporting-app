@@ -60,3 +60,19 @@ router.get('/me', authenticateToken, (req: Request, res: Response): void => {
 });
 
 export default router;
+
+router.put('/update-credentials', authenticateToken, (req: Request, res: Response): void => {
+  const { email, password } = req.body;
+  if (!email && !password) {
+    res.status(400).json({ error: 'Email or password required' });
+    return;
+  }
+  if (password) {
+    const hash = require('bcryptjs').hashSync(password, 12);
+    db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run([hash, req.user!.id]);
+  }
+  if (email) {
+    db.prepare('UPDATE users SET email = ? WHERE id = ?').run([email, req.user!.id]);
+  }
+  res.json({ success: true });
+});
