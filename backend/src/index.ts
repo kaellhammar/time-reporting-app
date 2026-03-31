@@ -10,15 +10,20 @@ import expensesRouter from './routes/expenses';
 
 const app = express();
 
-const allowedOrigins = [
-  'http://localhost:5173',
-  'http://localhost:4173',
-  'https://frontend-production-59c3.up.railway.app',
-  process.env.FRONTEND_URL,
-].filter(Boolean);
-
 app.use(cors({
-  origin: allowedOrigins,
+  origin: function(origin, callback) {
+    const allowed = [
+      'http://localhost:5173',
+      'http://localhost:4173',
+      'https://frontend-production-59c3.up.railway.app',
+      process.env.FRONTEND_URL,
+    ];
+    if (!origin || allowed.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true,
 }));
 
@@ -30,7 +35,6 @@ app.use('/api/time-entries', timeEntriesRouter);
 app.use('/api/salary-slips', salarySlipsRouter);
 app.use('/api/expenses', expensesRouter);
 
-// Global error handler
 app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error(err);
   res.status(err.status || 500).json({ error: err.message || 'Internal server error' });
