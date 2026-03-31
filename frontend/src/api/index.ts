@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const api = axios.create({ baseURL: '/api' });
+const api = axios.create({ baseURL: `${import.meta.env.VITE_API_URL || ''}/api` });
 
 api.interceptors.request.use(config => {
   const token = localStorage.getItem('token');
@@ -52,7 +52,7 @@ export const salarySlipsApi = {
   list: () => api.get('/salary-slips').then(r => r.data),
   generate: (data: { userId: number; year: number; month: number; paymentDate: string }) =>
     api.post('/salary-slips/generate', data).then(r => r.data),
-  pdfUrl: (id: number) => `/api/salary-slips/${id}/pdf`,
+  pdfUrl: (id: number) => `${import.meta.env.VITE_API_URL || ''}/api/salary-slips/${id}/pdf`,
 };
 
 export const expensesApi = {
@@ -66,20 +66,20 @@ export const expensesApi = {
     form.append('receipt', file);
     return api.post('/expenses/extract', form, { headers: { 'Content-Type': 'multipart/form-data' } }).then(r => r.data);
   },
-  receiptUrl: (filename: string) => `/api/expenses/receipt/${filename}`,
+  receiptUrl: (filename: string) => `${import.meta.env.VITE_API_URL || ''}/api/expenses/receipt/${filename}`,
   exportUrl: (params: { year?: number; month?: number; userId?: number }) => {
     const q = new URLSearchParams();
     if (params.year)   q.set('year',   String(params.year));
     if (params.month)  q.set('month',  String(params.month));
     if (params.userId) q.set('userId', String(params.userId));
-    return `/api/expenses/export?${q}`;
+    return `${import.meta.env.VITE_API_URL || ''}/api/expenses/export?${q}`;
   },
   receiptsZipUrl: (params: { year?: number; month?: number; userId?: number }) => {
     const q = new URLSearchParams();
     if (params.year)   q.set('year',   String(params.year));
     if (params.month)  q.set('month',  String(params.month));
     if (params.userId) q.set('userId', String(params.userId));
-    return `/api/expenses/receipts-zip?${q}`;
+    return `${import.meta.env.VITE_API_URL || ''}/api/expenses/receipts-zip?${q}`;
   },
 };
 
