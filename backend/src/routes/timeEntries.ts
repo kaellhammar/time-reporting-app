@@ -134,3 +134,20 @@ router.post('/:id/approve', requireAdmin, (req: Request, res: Response): void =>
 });
 
 export default router;
+
+// POST /api/time-entries/admin-migrate (admin only, for data migration)
+router.post('/admin-migrate', requireAdmin, (req: Request, res: Response): void => {
+  const { user_id, year, month, hours, status } = req.body;
+
+  db.prepare(`
+    INSERT INTO time_entries (user_id, year, month, hours, status, submitted_at, approved_at)
+    VALUES (?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+    ON CONFLICT(user_id, year, month) DO UPDATE SET hours = excluded.hours, status = excluded.status
+  `).run([user_id, year, month, hours, status]);
+
+  const entry = db.prepare(
+    'SELECT * FROM time_entries WHERE user_id = ? AND year = ? AND month = ?'
+  ).get([user_id, year, month]);
+
+  res.json(entry);
+});
