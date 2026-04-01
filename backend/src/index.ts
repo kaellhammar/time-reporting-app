@@ -16,6 +16,7 @@ app.use(cors({
       'http://localhost:5173',
       'http://localhost:4173',
       'https://frontend-production-59c3.up.railway.app',
+      'https://timeandexpense.kaellhammarone.com',
       process.env.FRONTEND_URL,
     ];
     if (!origin || allowed.includes(origin)) {
