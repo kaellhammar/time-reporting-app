@@ -12,6 +12,7 @@ export default function HoursEntry() {
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
+  const [assignment, setAssignment] = useState('');
   const [hours, setHours] = useState('');
   const [entry, setEntry] = useState<any>(null);
   const [loading, setLoading] = useState(false);
@@ -35,6 +36,7 @@ export default function HoursEntry() {
       const found = entries[0] || null;
       setEntry(found);
       setHours(found ? String(found.hours) : '');
+      setAssignment(found?.assignment || '');
     } catch {
       setError('Kunde inte hämta tidrapport');
     } finally {
@@ -50,7 +52,7 @@ export default function HoursEntry() {
     setSaving(true);
     setError('');
     try {
-      const saved = await timeEntriesApi.upsert({ year, month, hours: Number(hours) });
+      const saved = await timeEntriesApi.upsert({ year, month, hours: Number(hours), assignment });
       setEntry(saved);
       setMessage('Sparad som utkast');
     } catch (err: any) {
@@ -146,6 +148,21 @@ export default function HoursEntry() {
                 />
                 <span className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 text-sm">tim</span>
               </div>
+            </div>
+
+            
+            <div className="mb-6">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Uppdrag
+              </label>
+              <input
+                type="text"
+                value={assignment}
+                onChange={e => setAssignment(e.target.value)}
+                disabled={isLocked}
+                className="w-full border border-gray-300 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 disabled:bg-gray-50 disabled:text-gray-400"
+                placeholder="Ange uppdrag eller kund..."
+              />
             </div>
 
             {message && (
