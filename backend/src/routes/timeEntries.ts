@@ -57,7 +57,7 @@ router.get('/user/:userId', requireAdmin, (req: Request, res: Response): void =>
 
 // POST /api/time-entries — upsert draft
 router.post('/', (req: Request, res: Response): void => {
-  const { year, month, hours } = req.body;
+  const { year, month, hours, assignment } = req.body;
   const userId = req.user!.id;
 
   if (!year || !month || hours === undefined) {
@@ -76,11 +76,11 @@ router.post('/', (req: Request, res: Response): void => {
   }
 
   db.prepare(`
-    INSERT INTO time_entries (user_id, year, month, hours, status)
-    VALUES (?, ?, ?, ?, 'draft')
+    INSERT INTO time_entries (user_id, year, month, hours, assignment, status)
+    VALUES (?, ?, ?, ?, ?, 'draft')
     ON CONFLICT(user_id, year, month)
     DO UPDATE SET hours = excluded.hours, status = CASE WHEN status = 'submitted' THEN 'draft' ELSE status END
-  `).run([userId, year, month, hours]);
+  `).run([userId, year, month, hours, assignment || null]);
 
   const entry = db.prepare(
     'SELECT * FROM time_entries WHERE user_id = ? AND year = ? AND month = ?'

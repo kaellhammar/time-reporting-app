@@ -112,3 +112,6 @@ export function initDb(): void {
 }
 
 export default db;
+
+// Migration: add assignment column to time_entries
+try { db.exec('ALTER TABLE time_entries ADD COLUMN assignment TEXT'); } catch (_) { /* already exists */ }
