@@ -41,7 +41,7 @@ export const timeEntriesApi = {
     if (month) params.month = month;
     return api.get('/time-entries', { params }).then(r => r.data);
   },
-  upsert: (data: { year: number; month: number; hours: number }) =>
+  upsert: (data: { year: number; month: number; hours: number; assignment?: string }) =>
     api.post('/time-entries', data).then(r => r.data),
   submit: (id: number) => api.post(`/time-entries/${id}/submit`).then(r => r.data),
   approve: (id: number) => api.post(`/time-entries/${id}/approve`).then(r => r.data),
