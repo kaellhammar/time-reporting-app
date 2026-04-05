@@ -22,6 +22,9 @@ export default function AdminReview() {
   const [generating, setGenerating] = useState(false);
   const [genError, setGenError] = useState('');
   const [approving, setApproving] = useState<number | null>(null);
+  const [editingAssignment, setEditingAssignment] = useState<number | null>(null);
+  const [assignmentValue, setAssignmentValue] = useState('');
+  const [savingAssignment, setSavingAssignment] = useState(false);
 
   // Generate form state
   const [genUserIds, setGenUserIds] = useState<Set<number>>(new Set());
@@ -196,8 +199,10 @@ export default function AdminReview() {
                   <th className="px-6 py-3 text-left">Anställd</th>
                   <th className="px-6 py-3 text-left">Anst.nr</th>
                   <th className="px-6 py-3 text-right">Timmar</th>
+                  <th className="px-6 py-3 text-left">Uppdrag</th>
                   <th className="px-6 py-3 text-right">Lön</th>
                   <th className="px-6 py-3 text-center">Status</th>
+                  <th className="px-6 py-3 text-left">Uppdrag</th>
                   <th className="px-6 py-3 text-center">Åtgärder</th>
                 </tr>
               </thead>
@@ -207,6 +212,7 @@ export default function AdminReview() {
                     <td className="px-6 py-3 font-medium text-gray-800">{entry.employee_name}</td>
                     <td className="px-6 py-3 text-gray-500">{entry.employee_number}</td>
                     <td className="px-6 py-3 text-right font-mono">{entry.hours}</td>
+                    <td className="px-6 py-3 text-gray-600 text-sm">{entry.assignment || '—'}</td>
                     <td className="px-6 py-3 text-right text-gray-500 font-mono">
                       {entry.employment_type === 'monthly'
                         ? `${(entry.monthly_salary ?? 0).toLocaleString('sv-SE')} kr/mån`
@@ -227,6 +233,12 @@ export default function AdminReview() {
                       {entry.status === 'approved' && (
                         <span className="text-green-600 text-xs font-medium">✓ Godkänd</span>
                       )}
+                      <button
+                        className="ml-2 text-xs text-brand-600 hover:underline"
+                        onClick={() => { setEditingAssignment(entry.id); setAssignmentValue(entry.assignment || ''); }}
+                      >
+                        ✎ Uppdrag
+                      </button>
                       {entry.status === 'draft' && (
                         <span className="text-gray-400 text-xs">Ej inskickad</span>
                       )}
@@ -287,6 +299,43 @@ export default function AdminReview() {
               </tbody>
             </table>
           )}
+        </div>
+      )}
+
+
+      {/* Edit Assignment Modal */}
+      {editingAssignment !== null && (
+        <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md">
+            <h2 className="text-lg font-bold text-gray-800 mb-4">Redigera uppdrag</h2>
+            <input
+              type="text"
+              value={assignmentValue}
+              onChange={e => setAssignmentValue(e.target.value)}
+              className="w-full border border-gray-300 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 mb-4"
+              placeholder="Ange uppdrag eller kund..."
+            />
+            <div className="flex justify-end gap-3">
+              <Button variant="secondary" onClick={() => setEditingAssignment(null)}>Avbryt</Button>
+              <Button
+                disabled={savingAssignment}
+                onClick={async () => {
+                  setSavingAssignment(true);
+                  try {
+                    await timeEntriesApi.updateAssignment(editingAssignment, assignmentValue);
+                    setEditingAssignment(null);
+                    await loadData();
+                  } catch {
+                    alert('Kunde inte spara');
+                  } finally {
+                    setSavingAssignment(false);
+                  }
+                }}
+              >
+                {savingAssignment ? 'Sparar...' : 'Spara'}
+              </Button>
+            </div>
+          </div>
         </div>
       )}
 

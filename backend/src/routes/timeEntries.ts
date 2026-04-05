@@ -151,3 +151,11 @@ router.post('/admin-migrate', requireAdmin, (req: Request, res: Response): void 
 
   res.json(entry);
 });
+
+// PATCH /api/time-entries/:id/assignment (admin only)
+router.patch('/:id/assignment', requireAdmin, (req: Request, res: Response): void => {
+  const { assignment } = req.body;
+  db.prepare('UPDATE time_entries SET assignment = ? WHERE id = ?').run([assignment, req.params.id]);
+  const entry = db.prepare('SELECT * FROM time_entries WHERE id = ?').get([req.params.id]);
+  res.json(entry);
+});

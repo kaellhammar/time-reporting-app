@@ -46,6 +46,7 @@ export const timeEntriesApi = {
   submit: (id: number) => api.post(`/time-entries/${id}/submit`).then(r => r.data),
   approve: (id: number) => api.post(`/time-entries/${id}/approve`).then(r => r.data),
   byUser: (userId: number) => api.get(`/time-entries/user/${userId}`).then(r => r.data),
+  updateAssignment: (id: number, assignment: string) => api.patch(`/time-entries/${id}/assignment`, { assignment }).then(r => r.data),
 };
 
 export const salarySlipsApi = {
