@@ -25,6 +25,10 @@ export default function AdminReview() {
   const [editingAssignment, setEditingAssignment] = useState<number | null>(null);
   const [assignmentValue, setAssignmentValue] = useState('');
   const [savingAssignment, setSavingAssignment] = useState(false);
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [reportUserIds, setReportUserIds] = useState<Set<number>>(new Set());
+  const [reportYear, setReportYear] = useState(now.getFullYear());
+  const [reportMonth, setReportMonth] = useState<number | ''>(now.getMonth() + 1);
 
   // Generate form state
   const [genUserIds, setGenUserIds] = useState<Set<number>>(new Set());
@@ -139,9 +143,14 @@ export default function AdminReview() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-gray-800">Granskning & Lönebesked</h1>
+        <div className="flex gap-2">
+        <Button variant="secondary" onClick={() => { setShowReportModal(true); setReportUserIds(new Set(employees.map((e: any) => e.id))); }}>
+          Exportera tidrapport
+        </Button>
         <Button onClick={() => { setShowGenerateModal(true); setGenError(''); setGenProgress(''); setGenUserIds(new Set()); }}>
           + Generera lönebesked
         </Button>
+        </div>
       </div>
 
       {/* Tabs */}
@@ -333,6 +342,61 @@ export default function AdminReview() {
                 }}
               >
                 {savingAssignment ? 'Sparar...' : 'Spara'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+
+      {showReportModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md">
+            <h2 className="text-lg font-bold text-gray-800 mb-4">Exportera tidrapport till Excel</h2>
+            <div className="mb-4">
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-sm font-medium text-gray-700">Anstaellda</label>
+                <button type="button" className="text-xs text-brand-600 hover:underline" onClick={() => setReportUserIds(reportUserIds.size === employees.length ? new Set() : new Set(employees.map((e: any) => e.id)))}>
+                  {reportUserIds.size === employees.length ? "Avmarkera alla" : "Vaelj alla"}
+                </button>
+              </div>
+              <div className="border border-gray-300 rounded-lg divide-y divide-gray-100 max-h-48 overflow-y-auto">
+                {employees.map((e: any) => (
+                  <label key={e.id} className="flex items-center gap-3 px-3 py-2 cursor-pointer hover:bg-gray-50">
+                    <input type="checkbox" checked={reportUserIds.has(e.id)} onChange={() => setReportUserIds(prev => { const next = new Set(prev); next.has(e.id) ? next.delete(e.id) : next.add(e.id); return next; })} className="rounded border-gray-300 text-brand-600 focus:ring-brand-500" />
+                    <span className="text-sm text-gray-800">{e.name}</span>
+                    <span className="text-xs text-gray-400 ml-auto">{e.employee_number}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div className="flex gap-3 mb-4">
+              <div className="flex-1">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Ar</label>
+                <select value={reportYear} onChange={e => setReportYear(Number(e.target.value))} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+                  {years.map(y => <option key={y} value={y}>{y}</option>)}
+                </select>
+              </div>
+              <div className="flex-1">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Manad</label>
+                <select value={reportMonth} onChange={e => setReportMonth(e.target.value ? Number(e.target.value) : "")} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+                  <option value="">Alla manader</option>
+                  {MONTHS.map((m, i) => <option key={i+1} value={i+1}>{m}</option>)}
+                </select>
+              </div>
+            </div>
+            <div className="flex justify-end gap-3">
+              <Button variant="secondary" onClick={() => setShowReportModal(false)}>Avbryt</Button>
+              <Button disabled={reportUserIds.size === 0} onClick={() => {
+                const token = localStorage.getItem("token");
+                const ids = Array.from(reportUserIds).join(",");
+                const params = new URLSearchParams({ userIds: ids, year: String(reportYear) });
+                if (reportMonth) params.set("month", String(reportMonth));
+                const url = (import.meta.env.VITE_API_URL || "") + "/api/reports/time-entries?" + params;
+                fetch(url, { headers: { Authorization: "Bearer " + token } }).then(r => r.blob()).then(blob => { const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "tidrapport_" + reportYear + (reportMonth ? "_" + MONTHS[Number(reportMonth)-1] : "") + ".xlsx"; a.click(); });
+                setShowReportModal(false);
+              }}>
+                Ladda ner Excel
               </Button>
             </div>
           </div>

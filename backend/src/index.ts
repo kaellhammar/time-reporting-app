@@ -7,6 +7,7 @@ import employeesRouter from './routes/employees';
 import timeEntriesRouter from './routes/timeEntries';
 import salarySlipsRouter from './routes/salarySlips';
 import expensesRouter from './routes/expenses';
+import reportsRouter from './routes/reports';
 
 const app = express();
 
@@ -35,6 +36,7 @@ app.use('/api/employees', employeesRouter);
 app.use('/api/time-entries', timeEntriesRouter);
 app.use('/api/salary-slips', salarySlipsRouter);
 app.use('/api/expenses', expensesRouter);
+app.use('/api/reports', reportsRouter);
 
 app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error(err);
