@@ -155,10 +155,10 @@ router.put('/:id', (req: Request, res: Response): void => {
     return;
   }
 
-  const { inkops_stalle, avser, belopp, annan_valuta, klar, deltagare } = req.body;
+  const { inkops_stalle, avser, belopp, annan_valuta, klar, deltagare, receipt_filename } = req.body;
 
   db.prepare(`
-    UPDATE expenses SET inkops_stalle = ?, avser = ?, belopp = ?, annan_valuta = ?, klar = ?, deltagare = ?
+    UPDATE expenses SET inkops_stalle = ?, avser = ?, belopp = ?, annan_valuta = ?, klar = ?, deltagare = ?, receipt_filename = ?
     WHERE id = ?
   `).run([
     inkops_stalle !== undefined ? inkops_stalle : expense.inkops_stalle,
@@ -167,6 +167,7 @@ router.put('/:id', (req: Request, res: Response): void => {
     annan_valuta !== undefined ? annan_valuta : expense.annan_valuta,
     klar !== undefined ? (klar ? 1 : 0) : expense.klar,
     deltagare !== undefined ? deltagare : expense.deltagare,
+    receipt_filename !== undefined ? receipt_filename : expense.receipt_filename,
     req.params.id,
   ]);
 
