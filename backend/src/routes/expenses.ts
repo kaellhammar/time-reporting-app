@@ -1,7 +1,8 @@
 import { Router, Request, Response } from 'express';
 import multer from 'multer';
 import path from 'path';
-import fs from 'fs';
+import { Readable } from 'stream';
+import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import Anthropic from '@anthropic-ai/sdk';
 import ExcelJS from 'exceljs';
 import archiver from 'archiver';
@@ -11,21 +12,18 @@ import { authenticateToken } from '../middleware/auth';
 const router = Router();
 router.use(authenticateToken);
 
-const uploadsDir = path.resolve('./uploads/receipts');
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir, { recursive: true });
-}
-
-const storage = multer.diskStorage({
-  destination: uploadsDir,
-  filename: (_req, file, cb) => {
-    const ext = path.extname(file.originalname);
-    cb(null, `${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`);
+const r2 = new S3Client({
+  region: 'auto',
+  endpoint: process.env.R2_ENDPOINT,
+  credentials: {
+    accessKeyId: process.env.R2_ACCESS_KEY_ID!,
+    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY!,
   },
 });
+const R2_BUCKET = process.env.R2_BUCKET!;
 
 const upload = multer({
-  storage,
+  storage: multer.memoryStorage(),
   limits: { fileSize: 15 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
     const allowed = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'application/pdf'];
@@ -65,15 +63,25 @@ router.post('/extract', upload.single('receipt'), async (req: Request, res: Resp
     return;
   }
 
+  const ext = path.extname(req.file.originalname);
+  const filename = `${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`;
+
+  // Upload to R2
+  await r2.send(new PutObjectCommand({
+    Bucket: R2_BUCKET,
+    Key: filename,
+    Body: req.file.buffer,
+    ContentType: req.file.mimetype,
+  }));
+
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
-    res.json({ extracted: null, filename: req.file.filename, error: 'AI-extraktion ej konfigurerad' });
+    res.json({ extracted: null, filename, error: 'AI-extraktion ej konfigurerad' });
     return;
   }
 
   try {
-    const fileData = fs.readFileSync(req.file.path);
-    const base64 = fileData.toString('base64');
+    const base64 = req.file.buffer.toString('base64');
     const mimeType = req.file.mimetype as any;
     const isPdf = mimeType === 'application/pdf';
 
@@ -109,9 +117,9 @@ Returnera endast JSON, ingen förklaring.`,
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     if (!jsonMatch) throw new Error('Inget JSON i svaret');
 
-    res.json({ extracted: JSON.parse(jsonMatch[0]), filename: req.file.filename });
+    res.json({ extracted: JSON.parse(jsonMatch[0]), filename });
   } catch (err: any) {
-    res.json({ extracted: null, filename: req.file.filename, error: `Extraktion misslyckades: ${err.message}` });
+    res.json({ extracted: null, filename, error: `Extraktion misslyckades: ${err.message}` });
   }
 });
 
@@ -175,7 +183,7 @@ router.put('/:id', (req: Request, res: Response): void => {
 });
 
 // DELETE /api/expenses/:id
-router.delete('/:id', (req: Request, res: Response): void => {
+router.delete('/:id', async (req: Request, res: Response): Promise<void> => {
   const isAdmin = req.user!.role === 'admin';
   const expense = db.prepare(
     isAdmin
@@ -189,8 +197,9 @@ router.delete('/:id', (req: Request, res: Response): void => {
   }
 
   if (expense.receipt_filename) {
-    const filePath = path.join(uploadsDir, expense.receipt_filename);
-    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    try {
+      await r2.send(new DeleteObjectCommand({ Bucket: R2_BUCKET, Key: expense.receipt_filename }));
+    } catch (_) { /* best-effort */ }
   }
 
   db.prepare('DELETE FROM expenses WHERE id = ?').run([req.params.id]);
@@ -352,7 +361,7 @@ router.get('/export', async (req: Request, res: Response): Promise<void> => {
 });
 
 // GET /api/expenses/receipts-zip — download all receipts for a period as a ZIP
-router.get('/receipts-zip', (req: Request, res: Response): void => {
+router.get('/receipts-zip', async (req: Request, res: Response): Promise<void> => {
   const { year, month, userId } = req.query;
   const isAdmin = req.user!.role === 'admin';
 
@@ -367,21 +376,14 @@ router.get('/receipts-zip', (req: Request, res: Response): void => {
                WHERE e.receipt_filename IS NOT NULL AND e.receipt_filename != ''`;
   const params: any[] = [];
 
-  if (!isAdmin) {
-    query += ` AND e.user_id = ?`;
-    params.push(req.user!.id);
-  } else if (userId) {
-    query += ` AND e.user_id = ?`;
-    params.push(userId);
-  }
+  if (!isAdmin) { query += ` AND e.user_id = ?`; params.push(req.user!.id); }
+  else if (userId) { query += ` AND e.user_id = ?`; params.push(userId); }
   if (year)  { query += ` AND e.year = ?`;  params.push(year); }
   if (month) { query += ` AND e.month = ?`; params.push(month); }
   query += ` ORDER BY e.nr ASC`;
 
   const rows = db.prepare(query).all(params) as any[];
-  const existing = rows.filter(r => fs.existsSync(path.join(uploadsDir, r.receipt_filename)));
-
-  if (existing.length === 0) {
+  if (rows.length === 0) {
     res.status(404).json({ error: 'Inga kvittofiler hittades för perioden' });
     return;
   }
@@ -393,42 +395,36 @@ router.get('/receipts-zip', (req: Request, res: Response): void => {
   const archive = archiver('zip', { zlib: { level: 6 } });
   archive.pipe(res);
 
-  for (const row of existing) {
-    const ext = path.extname(row.receipt_filename);
-    // Sanitise name: remove characters not allowed in filenames
-    const storeName = (row.inkops_stalle || 'okänt').replace(/[/\\?*:"|<>]/g, '-').trim();
-    const entryName = `${folderName}/${row.nr} - ${storeName}${ext}`;
-    archive.file(path.join(uploadsDir, row.receipt_filename), { name: entryName });
+  for (const row of rows) {
+    try {
+      const r2res = await r2.send(new GetObjectCommand({ Bucket: R2_BUCKET, Key: row.receipt_filename }));
+      const ext = path.extname(row.receipt_filename);
+      const storeName = (row.inkops_stalle || 'okänt').replace(/[/\\?*:"|<>]/g, '-').trim();
+      const entryName = `${folderName}/${row.nr} - ${storeName}${ext}`;
+      archive.append(r2res.Body as Readable, { name: entryName });
+    } catch (_) { /* skip missing files */ }
   }
 
   archive.finalize();
 });
 
-// GET /api/expenses/receipt/:filename — serve uploaded file
-router.get('/receipt/:filename', (req: Request, res: Response): void => {
-  const filename = path.basename(req.params.filename); // prevent path traversal
-  const expense = db.prepare(
-    `SELECT e.* FROM expenses e WHERE e.receipt_filename = ?`
-  ).get([filename]) as any;
+// GET /api/expenses/receipt/:filename — serve uploaded file from R2
+router.get('/receipt/:filename', async (req: Request, res: Response): Promise<void> => {
+  const filename = path.basename(req.params.filename);
+  const expense = db.prepare('SELECT e.* FROM expenses e WHERE e.receipt_filename = ?').get([filename]) as any;
 
-  if (!expense) {
-    res.status(404).json({ error: 'Fil hittades inte' });
-    return;
-  }
-
-  // Only allow access to own receipts (or admin)
+  if (!expense) { res.status(404).json({ error: 'Fil hittades inte' }); return; }
   if (req.user!.role !== 'admin' && expense.user_id !== req.user!.id) {
-    res.status(403).json({ error: 'Åtkomst nekad' });
-    return;
+    res.status(403).json({ error: 'Åtkomst nekad' }); return;
   }
 
-  const filePath = path.join(uploadsDir, filename);
-  if (!fs.existsSync(filePath)) {
-    res.status(404).json({ error: 'Fil saknas på disk' });
-    return;
+  try {
+    const r2res = await r2.send(new GetObjectCommand({ Bucket: R2_BUCKET, Key: filename }));
+    res.setHeader('Content-Type', r2res.ContentType || 'application/octet-stream');
+    (r2res.Body as Readable).pipe(res);
+  } catch (_) {
+    res.status(404).json({ error: 'Fil saknas' });
   }
-
-  res.sendFile(filePath);
 });
 
 export default router;
