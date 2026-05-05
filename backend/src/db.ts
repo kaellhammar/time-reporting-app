@@ -93,6 +93,23 @@ export function initDb(): void {
     );
   `);
 
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS traktamente (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      year INTEGER NOT NULL,
+      month INTEGER NOT NULL,
+      nr INTEGER NOT NULL,
+      datum TEXT NOT NULL,
+      ort TEXT,
+      syfte TEXT,
+      typ TEXT NOT NULL DEFAULT 'hel_dag' CHECK(typ IN ('hel_dag', 'halv_dag', 'natt')),
+      belopp REAL,
+      klar INTEGER DEFAULT 0,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+  `);
+
   // Migrations for columns added after initial schema
   try { db.exec('ALTER TABLE users ADD COLUMN personnummer TEXT'); } catch (_) { /* already exists */ }
   try { db.exec('ALTER TABLE users ADD COLUMN monthly_salary REAL DEFAULT 0'); } catch (_) { /* already exists */ }

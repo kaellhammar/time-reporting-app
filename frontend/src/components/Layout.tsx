@@ -34,6 +34,7 @@ export default function Layout({ children }: { children: ReactNode }) {
                 {isAdmin && navLink('/admin/review', 'Granskning')}
                 {!isAdmin && navLink('/hours', 'Mina timmar')}
                 {navLink('/expenses', 'Utlägg')}
+                {navLink('/traktamente', 'Traktamente')}
               </div>
             </div>
             <div className="flex items-center gap-3">

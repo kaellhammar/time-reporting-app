@@ -6,6 +6,7 @@ import Employees from './pages/Employees';
 import AdminReview from './pages/AdminReview';
 import HoursEntry from './pages/HoursEntry';
 import Expenses from './pages/Expenses';
+import Traktamente from './pages/Traktamente';
 import Layout from './components/Layout';
 
 function ProtectedRoute() {
@@ -34,6 +35,7 @@ export default function App() {
             </Route>
             <Route path="/hours" element={<HoursEntry />} />
             <Route path="/expenses" element={<Expenses />} />
+            <Route path="/traktamente" element={<Traktamente />} />
           </Route>
           <Route path="/" element={<Navigate to="/hours" replace />} />
           <Route path="*" element={<Navigate to="/" replace />} />

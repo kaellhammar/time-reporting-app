@@ -84,4 +84,19 @@ export const expensesApi = {
   },
 };
 
+export const traktamenteApi = {
+  list: (params?: { year?: number; month?: number; userId?: number }) =>
+    api.get('/traktamente', { params }).then(r => r.data),
+  create: (data: any) => api.post('/traktamente', data).then(r => r.data),
+  update: (id: number, data: any) => api.put(`/traktamente/${id}`, data).then(r => r.data),
+  delete: (id: number) => api.delete(`/traktamente/${id}`).then(r => r.data),
+  exportUrl: (params: { year?: number; month?: number; userId?: number }) => {
+    const q = new URLSearchParams();
+    if (params.year)   q.set('year',   String(params.year));
+    if (params.month)  q.set('month',  String(params.month));
+    if (params.userId) q.set('userId', String(params.userId));
+    return `${import.meta.env.VITE_API_URL || ''}/api/traktamente/export?${q}`;
+  },
+};
+
 export default api;
