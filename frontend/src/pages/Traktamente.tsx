@@ -15,14 +15,23 @@ const TYP_OPTIONS = [
   { value: 'natt', label: 'Natt' },
 ];
 
+const SKATTEVERKET_URL =
+  'https://skatteverket.entryscape.net/rowstore/dataset/70ccea31-b64c-4bf5-84c7-673f04f32505/json';
+
 const emptyForm = {
   datum: '',
+  land: '',
   ort: '',
   syfte: '',
   typ: 'hel_dag',
   belopp: '',
   klar: false,
 };
+
+function calculateBelopp(normalbelopp: number, typ: string): number {
+  if (typ === 'halv_dag') return Math.round(normalbelopp / 2);
+  return normalbelopp;
+}
 
 export default function Traktamente() {
   const { isAdmin } = useAuth();
@@ -37,10 +46,57 @@ export default function Traktamente() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
+  const [normalbelopp, setNormalbelopp] = useState<number | null>(null);
+  const [lookupLoading, setLookupLoading] = useState(false);
+  const [lookupError, setLookupError] = useState('');
 
   const years = [now.getFullYear() - 1, now.getFullYear(), now.getFullYear() + 1];
 
   useEffect(() => { load(); }, [year, month]);
+
+  // Fetch traktamente amount from Skatteverket when land changes
+  useEffect(() => {
+    if (!showModal) return;
+    const land = form.land.trim();
+    if (!land) {
+      setNormalbelopp(null);
+      setLookupError('');
+      return;
+    }
+    const timer = setTimeout(async () => {
+      setLookupLoading(true);
+      setLookupError('');
+      try {
+        const params = new URLSearchParams();
+        params.set('land eller område', land);
+        params.set('år', String(year));
+        const res = await fetch(`${SKATTEVERKET_URL}?${params}`);
+        const data = await res.json();
+        if (data.results?.length > 0) {
+          const nb = Number(data.results[0]['normalbelopp']);
+          setNormalbelopp(nb);
+          setForm(prev => ({ ...prev, belopp: String(calculateBelopp(nb, prev.typ)) }));
+          setLookupError('');
+        } else {
+          setNormalbelopp(null);
+          setLookupError(`"${land}" hittades inte i Skatteverkets register för ${year}`);
+        }
+      } catch {
+        setNormalbelopp(null);
+        setLookupError('Kunde inte hämta belopp från Skatteverket');
+      } finally {
+        setLookupLoading(false);
+      }
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [form.land, showModal]);
+
+  // Recalculate belopp when typ changes if a lookup has been done
+  useEffect(() => {
+    if (normalbelopp !== null) {
+      setForm(prev => ({ ...prev, belopp: String(calculateBelopp(normalbelopp, prev.typ)) }));
+    }
+  }, [form.typ, normalbelopp]);
 
   const load = async () => {
     setLoading(true);
@@ -55,6 +111,8 @@ export default function Traktamente() {
   const openCreate = () => {
     setEditing(null);
     setForm({ ...emptyForm });
+    setNormalbelopp(null);
+    setLookupError('');
     setError('');
     setShowModal(true);
   };
@@ -63,12 +121,15 @@ export default function Traktamente() {
     setEditing(row);
     setForm({
       datum: row.datum || '',
+      land: row.land || '',
       ort: row.ort || '',
       syfte: row.syfte || '',
       typ: row.typ || 'hel_dag',
       belopp: row.belopp != null ? String(row.belopp) : '',
       klar: !!row.klar,
     });
+    setNormalbelopp(null);
+    setLookupError('');
     setError('');
     setShowModal(true);
   };
@@ -82,6 +143,7 @@ export default function Traktamente() {
         year,
         month,
         datum: form.datum,
+        land: form.land || null,
         ort: form.ort || null,
         syfte: form.syfte || null,
         typ: form.typ,
@@ -169,6 +231,7 @@ export default function Traktamente() {
                   <th className="px-4 py-3 text-left w-10">Nr</th>
                   {isAdmin && <th className="px-4 py-3 text-left">Anställd</th>}
                   <th className="px-4 py-3 text-left">Datum</th>
+                  <th className="px-4 py-3 text-left">Land</th>
                   <th className="px-4 py-3 text-left">Ort</th>
                   <th className="px-4 py-3 text-left">Syfte</th>
                   <th className="px-4 py-3 text-left">Typ</th>
@@ -188,6 +251,7 @@ export default function Traktamente() {
                       </td>
                     )}
                     <td className="px-4 py-2 text-gray-800">{row.datum}</td>
+                    <td className="px-4 py-2 text-gray-600">{row.land || '—'}</td>
                     <td className="px-4 py-2 text-gray-600">{row.ort || '—'}</td>
                     <td className="px-4 py-2 text-gray-600">{row.syfte || '—'}</td>
                     <td className="px-4 py-2 text-gray-600">
@@ -235,7 +299,7 @@ export default function Traktamente() {
               </tbody>
               <tfoot>
                 <tr className="bg-gray-50 font-semibold text-sm">
-                  <td colSpan={isAdmin ? 6 : 5} className="px-4 py-3 text-right text-gray-600">Totalt:</td>
+                  <td colSpan={isAdmin ? 7 : 6} className="px-4 py-3 text-right text-gray-600">Totalt:</td>
                   <td className="px-4 py-3 text-right font-mono">
                     {total.toLocaleString('sv-SE', { minimumFractionDigits: 2 })}
                   </td>
@@ -267,6 +331,27 @@ export default function Traktamente() {
                 <select value={form.typ} onChange={e => f('typ', e.target.value)} className={inputCls}>
                   {TYP_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                 </select>
+              </Field>
+              <Field label="Land">
+                <div className="relative">
+                  <input
+                    value={form.land}
+                    onChange={e => f('land', e.target.value)}
+                    className={inputCls}
+                    placeholder="T.ex. Tyskland, Japan..."
+                  />
+                  {lookupLoading && (
+                    <span className="absolute right-3 top-2 text-xs text-gray-400">Hämtar...</span>
+                  )}
+                </div>
+                {lookupError && (
+                  <p className="mt-1 text-xs text-amber-600">{lookupError}</p>
+                )}
+                {normalbelopp !== null && !lookupLoading && (
+                  <p className="mt-1 text-xs text-green-600">
+                    Normalbelopp {normalbelopp} SEK/dag (Skatteverket {year})
+                  </p>
+                )}
               </Field>
               <Field label="Ort">
                 <input

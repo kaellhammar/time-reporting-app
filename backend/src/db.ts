@@ -111,6 +111,7 @@ export function initDb(): void {
   `);
 
   // Migrations for columns added after initial schema
+  try { db.exec('ALTER TABLE traktamente ADD COLUMN land TEXT'); } catch (_) { /* already exists */ }
   try { db.exec('ALTER TABLE users ADD COLUMN personnummer TEXT'); } catch (_) { /* already exists */ }
   try { db.exec('ALTER TABLE users ADD COLUMN monthly_salary REAL DEFAULT 0'); } catch (_) { /* already exists */ }
   try { db.exec('ALTER TABLE users ADD COLUMN tabellskatt_rate REAL DEFAULT 0.25'); } catch (_) { /* already exists */ }
