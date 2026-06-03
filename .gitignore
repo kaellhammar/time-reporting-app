@@ -5,3 +5,5 @@ backend/dist
 backend/database.sqlite
 backend/database.sqlite.lock
 .env
+backend/.env
+frontend/.env
