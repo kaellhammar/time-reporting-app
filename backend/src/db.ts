@@ -13,7 +13,7 @@ const dbPath = process.env.DATABASE_PATH
 // Remove stale lock directory left by crashed/killed processes
 const lockPath = `${dbPath}.lock`;
 if (fs.existsSync(lockPath)) {
-  fs.rmdirSync(lockPath);
+  fs.rmSync(lockPath, { recursive: true, force: true });
   console.log('Removed stale database lock');
 }
 

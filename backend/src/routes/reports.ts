@@ -25,20 +25,20 @@ router.get('/time-entries', requireAdmin, async (req: Request, res: Response): P
     { header: 'Anst.nr', key: 'employee_number', width: 10 },
     { header: 'Namn', key: 'employee_name', width: 22 },
     { header: 'Personnummer', key: 'personnummer', width: 16 },
-    { header: 'Ar', key: 'year', width: 8 },
-    { header: 'Manad', key: 'month', width: 14 },
+    { header: 'År', key: 'year', width: 8 },
+    { header: 'Månad', key: 'month', width: 14 },
     { header: 'Uppdrag', key: 'assignment', width: 24 },
     { header: 'Timmar', key: 'hours', width: 10 },
-    { header: 'Anstallningstyp', key: 'employment_type', width: 16 },
-    { header: 'Timlon', key: 'hourly_rate', width: 10 },
-    { header: 'Manadsilon', key: 'monthly_salary', width: 12 },
+    { header: 'Anställningstyp', key: 'employment_type', width: 16 },
+    { header: 'Timlön', key: 'hourly_rate', width: 10 },
+    { header: 'Månadslön', key: 'monthly_salary', width: 12 },
     { header: 'Skattesats', key: 'tax_rate', width: 12 },
     { header: 'Status', key: 'status', width: 12 },
   ];
   sheet.getRow(1).eachCell(cell => { cell.fill = headerFill; cell.font = headerFont; cell.alignment = { vertical: 'middle', horizontal: 'center' }; });
   sheet.getRow(1).height = 24;
   entries.forEach((e: any, i: number) => {
-    const row = sheet.addRow({ employee_number: e.employee_number, employee_name: e.employee_name, personnummer: e.personnummer || '', year: e.year, month: MONTHS[e.month - 1], assignment: e.assignment || '', hours: e.hours, employment_type: e.employment_type === 'monthly' ? 'Manadsanstald' : 'Timanstald', hourly_rate: e.employment_type === 'hourly' ? e.hourly_rate : '', monthly_salary: e.employment_type === 'monthly' ? e.monthly_salary : '', tax_rate: Math.round(e.tax_rate * 100) + '%', status: e.status === 'approved' ? 'Godkand' : e.status === 'submitted' ? 'Inskickad' : 'Utkast' });
+    const row = sheet.addRow({ employee_number: e.employee_number, employee_name: e.employee_name, personnummer: e.personnummer || '', year: e.year, month: MONTHS[e.month - 1], assignment: e.assignment || '', hours: e.hours, employment_type: e.employment_type === 'monthly' ? 'Månadsanställd' : 'Timanställd', hourly_rate: e.employment_type === 'hourly' ? e.hourly_rate : '', monthly_salary: e.employment_type === 'monthly' ? e.monthly_salary : '', tax_rate: Math.round(e.tax_rate * 100) + '%', status: e.status === 'approved' ? 'Godkänd' : e.status === 'submitted' ? 'Inskickad' : 'Utkast' });
     if (i % 2 === 0) { row.eachCell((cell: ExcelJS.Cell) => { cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF5F7FA' } }; }); }
   });
   const periodLabel = year && month ? '_' + year + '_' + MONTHS[Number(month)-1] : year ? '_' + year : '';
