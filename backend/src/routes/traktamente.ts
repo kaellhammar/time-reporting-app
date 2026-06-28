@@ -34,7 +34,7 @@ router.get('/', (req: Request, res: Response): void => {
 // POST /api/traktamente
 router.post('/', (req: Request, res: Response): void => {
   const userId = req.user!.id;
-  const { year, month, datum, land, ort, syfte, typ, belopp, klar } = req.body;
+  const { year, month, datum, land, ort, syfte, typ, belopp, klar, avdrag_frukost, avdrag_lunch, avdrag_middag } = req.body;
 
   if (!year || !month || !datum) {
     res.status(400).json({ error: 'year, month och datum krävs' });
@@ -46,9 +46,10 @@ router.post('/', (req: Request, res: Response): void => {
   ).get([userId, year, month]) as any).max_nr;
 
   const result = db.prepare(`
-    INSERT INTO traktamente (user_id, year, month, nr, datum, land, ort, syfte, typ, belopp, klar)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run([userId, year, month, maxNr + 1, datum, land || null, ort || null, syfte || null, typ || 'hel_dag', belopp ?? null, klar ? 1 : 0]);
+    INSERT INTO traktamente (user_id, year, month, nr, datum, land, ort, syfte, typ, belopp, klar, avdrag_frukost, avdrag_lunch, avdrag_middag)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run([userId, year, month, maxNr + 1, datum, land || null, ort || null, syfte || null, typ || 'hel_dag', belopp ?? null, klar ? 1 : 0,
+    avdrag_frukost ? 1 : 0, avdrag_lunch ? 1 : 0, avdrag_middag ? 1 : 0]);
 
   const row = db.prepare('SELECT t.*, u.name as employee_name, u.employee_number FROM traktamente t JOIN users u ON t.user_id = u.id WHERE t.id = ?').get([result.lastInsertRowid]);
   res.status(201).json(row);
@@ -57,16 +58,20 @@ router.post('/', (req: Request, res: Response): void => {
 // PUT /api/traktamente/:id
 router.put('/:id', (req: Request, res: Response): void => {
   const isAdmin = req.user!.role === 'admin';
-  const { datum, land, ort, syfte, typ, belopp, klar } = req.body;
+  const { datum, land, ort, syfte, typ, belopp, klar, avdrag_frukost, avdrag_lunch, avdrag_middag } = req.body;
 
   const existing = db.prepare('SELECT * FROM traktamente WHERE id = ?').get([req.params.id]) as any;
   if (!existing) { res.status(404).json({ error: 'Hittades inte' }); return; }
   if (!isAdmin && existing.user_id !== req.user!.id) { res.status(403).json({ error: 'Ej tillåtet' }); return; }
 
   db.prepare(`
-    UPDATE traktamente SET datum = ?, land = ?, ort = ?, syfte = ?, typ = ?, belopp = ?, klar = ?
+    UPDATE traktamente SET datum = ?, land = ?, ort = ?, syfte = ?, typ = ?, belopp = ?, klar = ?, avdrag_frukost = ?, avdrag_lunch = ?, avdrag_middag = ?
     WHERE id = ?
-  `).run([datum ?? existing.datum, land ?? null, ort ?? null, syfte ?? null, typ ?? existing.typ, belopp ?? null, klar ? 1 : 0, req.params.id]);
+  `).run([datum ?? existing.datum, land ?? null, ort ?? null, syfte ?? null, typ ?? existing.typ, belopp ?? null, klar ? 1 : 0,
+    avdrag_frukost !== undefined ? (avdrag_frukost ? 1 : 0) : existing.avdrag_frukost,
+    avdrag_lunch   !== undefined ? (avdrag_lunch   ? 1 : 0) : existing.avdrag_lunch,
+    avdrag_middag  !== undefined ? (avdrag_middag  ? 1 : 0) : existing.avdrag_middag,
+    req.params.id]);
 
   const row = db.prepare('SELECT t.*, u.name as employee_name, u.employee_number FROM traktamente t JOIN users u ON t.user_id = u.id WHERE t.id = ?').get([req.params.id]);
   res.json(row);
@@ -103,30 +108,57 @@ router.get('/export', async (req: Request, res: Response): Promise<void> => {
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet('Traktamente');
 
-  const headers = isAdmin
-    ? ['Nr', 'Anställd', 'Personnr', 'Datum', 'Land', 'Ort', 'Syfte', 'Typ', 'Belopp (SEK)', 'Klar']
-    : ['Nr', 'Datum', 'Land', 'Ort', 'Syfte', 'Typ', 'Belopp (SEK)', 'Klar'];
-
-  ws.addRow(headers);
-  ws.getRow(1).font = { bold: true };
-
   const typLabel = (t: string) => t === 'hel_dag' ? 'Hel dag' : t === 'halv_dag' ? 'Halv dag' : 'Natt';
+  const calcDeduction = (r: any) => {
+    const base = r.belopp || 0;
+    return Math.round(base * ((r.avdrag_frukost ? 15 : 0) + (r.avdrag_lunch ? 35 : 0) + (r.avdrag_middag ? 35 : 0)) / 100 * 100) / 100;
+  };
+  const avdragLabel = (r: any) => {
+    const parts = [];
+    if (r.avdrag_frukost) parts.push('Frukost 15%');
+    if (r.avdrag_lunch)   parts.push('Lunch 35%');
+    if (r.avdrag_middag)  parts.push('Middag 35%');
+    return parts.join(', ') || '';
+  };
+
+  const headers = isAdmin
+    ? ['Nr', 'Anställd', 'Personnr', 'Datum', 'Land', 'Ort', 'Syfte', 'Typ', 'Belopp (SEK)', 'Avdrag', 'Avdrag (SEK)', 'Netto (SEK)', 'Klar']
+    : ['Nr', 'Datum', 'Land', 'Ort', 'Syfte', 'Typ', 'Belopp (SEK)', 'Avdrag', 'Avdrag (SEK)', 'Netto (SEK)', 'Klar'];
+
+  const headerRow = ws.addRow(headers);
+  headerRow.font = { bold: true };
+  headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2D6A9F' } };
+  headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
 
   rows.forEach(r => {
+    const deduction = calcDeduction(r);
+    const net = (r.belopp ?? 0) - deduction;
     if (isAdmin) {
-      ws.addRow([r.nr, r.employee_name, r.employee_number, r.datum, r.land || '', r.ort || '', r.syfte || '', typLabel(r.typ), r.belopp ?? '', r.klar ? 'Ja' : 'Nej']);
+      ws.addRow([r.nr, r.employee_name, r.employee_number, r.datum, r.land || '', r.ort || '', r.syfte || '', typLabel(r.typ),
+        r.belopp ?? '', avdragLabel(r), deduction || '', net || '', r.klar ? 'Ja' : 'Nej']);
     } else {
-      ws.addRow([r.nr, r.datum, r.land || '', r.ort || '', r.syfte || '', typLabel(r.typ), r.belopp ?? '', r.klar ? 'Ja' : 'Nej']);
+      ws.addRow([r.nr, r.datum, r.land || '', r.ort || '', r.syfte || '', typLabel(r.typ),
+        r.belopp ?? '', avdragLabel(r), deduction || '', net || '', r.klar ? 'Ja' : 'Nej']);
     }
   });
 
-  const total = rows.reduce((s, r) => s + (r.belopp || 0), 0);
+  // Number format the amount columns
+  const beloppCol  = isAdmin ? 9  : 7;
+  const avdragCol  = isAdmin ? 11 : 9;
+  const nettoCol   = isAdmin ? 12 : 10;
+  for (let i = 2; i <= rows.length + 1; i++) {
+    ws.getRow(i).getCell(beloppCol).numFmt = '#,##0.00';
+    ws.getRow(i).getCell(avdragCol).numFmt = '#,##0.00';
+    ws.getRow(i).getCell(nettoCol).numFmt  = '#,##0.00';
+  }
+
+  const netTotal = rows.reduce((s, r) => s + ((r.belopp || 0) - calcDeduction(r)), 0);
   const totalRow = ws.addRow([]);
-  const beloppCol = isAdmin ? 9 : 7;
-  totalRow.getCell(beloppCol - 1).value = 'Totalt:';
-  totalRow.getCell(beloppCol - 1).font = { bold: true };
-  totalRow.getCell(beloppCol).value = total;
-  totalRow.getCell(beloppCol).font = { bold: true };
+  totalRow.getCell(nettoCol - 1).value = 'Totalt netto:';
+  totalRow.getCell(nettoCol - 1).font  = { bold: true };
+  totalRow.getCell(nettoCol).value     = netTotal;
+  totalRow.getCell(nettoCol).font      = { bold: true };
+  totalRow.getCell(nettoCol).numFmt    = '#,##0.00';
 
   ws.columns.forEach(col => { col.width = 18; });
 

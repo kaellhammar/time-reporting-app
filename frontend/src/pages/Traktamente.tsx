@@ -26,7 +26,15 @@ const emptyForm = {
   typ: 'hel_dag',
   belopp: '',
   klar: false,
+  avdrag_frukost: false,
+  avdrag_lunch: false,
+  avdrag_middag: false,
 };
+
+function calcDeduction(belopp: number, frukost: boolean, lunch: boolean, middag: boolean): number {
+  const pct = (frukost ? 15 : 0) + (lunch ? 35 : 0) + (middag ? 35 : 0);
+  return Math.round(belopp * pct) / 100;
+}
 
 function calculateBelopp(normalbelopp: number, typ: string): number {
   if (typ === 'halv_dag') return Math.round(normalbelopp / 2);
@@ -127,6 +135,9 @@ export default function Traktamente() {
       typ: row.typ || 'hel_dag',
       belopp: row.belopp != null ? String(row.belopp) : '',
       klar: !!row.klar,
+      avdrag_frukost: !!row.avdrag_frukost,
+      avdrag_lunch: !!row.avdrag_lunch,
+      avdrag_middag: !!row.avdrag_middag,
     });
     setNormalbelopp(null);
     setLookupError('');
@@ -149,6 +160,9 @@ export default function Traktamente() {
         typ: form.typ,
         belopp: form.belopp !== '' ? Number(form.belopp) : null,
         klar: form.klar,
+        avdrag_frukost: form.avdrag_frukost,
+        avdrag_lunch: form.avdrag_lunch,
+        avdrag_middag: form.avdrag_middag,
       };
       if (editing) {
         await traktamenteApi.update(editing.id, payload);
@@ -188,9 +202,18 @@ export default function Traktamente() {
       });
   };
 
-  const total = rows.reduce((sum, r) => sum + (r.belopp || 0), 0);
+  const netBelopp = (r: any) => {
+    const b = r.belopp || 0;
+    return b - calcDeduction(b, !!r.avdrag_frukost, !!r.avdrag_lunch, !!r.avdrag_middag);
+  };
+  const total = rows.reduce((sum, r) => sum + netBelopp(r), 0);
+
   const f = (key: keyof typeof emptyForm, value: any) =>
     setForm(prev => ({ ...prev, [key]: value }));
+
+  const formBelopp = form.belopp !== '' ? Number(form.belopp) : 0;
+  const formDeduction = calcDeduction(formBelopp, form.avdrag_frukost, form.avdrag_lunch, form.avdrag_middag);
+  const formNet = formBelopp - formDeduction;
 
   return (
     <div>
@@ -258,9 +281,18 @@ export default function Traktamente() {
                       {TYP_OPTIONS.find(t => t.value === row.typ)?.label || row.typ}
                     </td>
                     <td className="px-4 py-2 text-right font-mono">
-                      {row.belopp != null
-                        ? row.belopp.toLocaleString('sv-SE', { minimumFractionDigits: 2 })
-                        : '—'}
+                      {row.belopp != null ? (
+                        <div>
+                          <span>{netBelopp(row).toLocaleString('sv-SE', { minimumFractionDigits: 2 })}</span>
+                          {(row.avdrag_frukost || row.avdrag_lunch || row.avdrag_middag) ? (
+                            <div className="text-xs text-gray-400 font-sans">
+                              {row.belopp.toLocaleString('sv-SE', { minimumFractionDigits: 2 })}
+                              {' − '}
+                              {calcDeduction(row.belopp, !!row.avdrag_frukost, !!row.avdrag_lunch, !!row.avdrag_middag).toLocaleString('sv-SE', { minimumFractionDigits: 2 })}
+                            </div>
+                          ) : null}
+                        </div>
+                      ) : '—'}
                     </td>
                     <td className="px-4 py-2 text-center">
                       {row.klar
@@ -370,6 +402,32 @@ export default function Traktamente() {
                   placeholder="0.00"
                   step="0.01"
                 />
+              </Field>
+              <Field label="Måltidsavdrag" className="col-span-2">
+                <div className="flex gap-6">
+                  {([
+                    { key: 'avdrag_frukost', label: 'Frukost', pct: 15 },
+                    { key: 'avdrag_lunch',   label: 'Lunch',   pct: 35 },
+                    { key: 'avdrag_middag',  label: 'Middag',  pct: 35 },
+                  ] as const).map(({ key, label, pct }) => (
+                    <label key={key} className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={form[key]}
+                        onChange={e => f(key, e.target.checked)}
+                        className="rounded border-gray-300 text-brand-600 focus:ring-brand-500"
+                      />
+                      <span className="text-sm text-gray-700">{label} <span className="text-gray-400">({pct}%)</span></span>
+                    </label>
+                  ))}
+                </div>
+                {formDeduction > 0 && (
+                  <div className="mt-2 flex items-center gap-4 text-sm bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                    <span className="text-amber-700">Avdrag: <span className="font-mono font-semibold">−{formDeduction.toLocaleString('sv-SE', { minimumFractionDigits: 2 })} kr</span></span>
+                    <span className="text-gray-400">→</span>
+                    <span className="text-gray-800">Netto: <span className="font-mono font-semibold">{formNet.toLocaleString('sv-SE', { minimumFractionDigits: 2 })} kr</span></span>
+                  </div>
+                )}
               </Field>
               <Field label="Syfte" className="col-span-2">
                 <input
