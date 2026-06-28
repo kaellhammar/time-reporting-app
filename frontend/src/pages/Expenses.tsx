@@ -15,6 +15,7 @@ const emptyForm = {
   belopp: '',
   annan_valuta: '',
   klar: false,
+  friskvard: false,
   deltagare: '',
 };
 
@@ -70,6 +71,7 @@ export default function Expenses() {
       belopp: exp.belopp != null ? String(exp.belopp) : '',
       annan_valuta: exp.annan_valuta || '',
       klar: !!exp.klar,
+      friskvard: !!exp.friskvard,
       deltagare: exp.deltagare || '',
     });
     setPendingFilename(exp.receipt_filename || '');
@@ -121,6 +123,7 @@ export default function Expenses() {
         belopp: form.belopp !== '' ? Number(form.belopp) : null,
         annan_valuta: form.annan_valuta || null,
         klar: form.klar,
+        friskvard: form.friskvard,
         deltagare: form.deltagare || null,
         receipt_filename: pendingFilename || null,
       };
@@ -250,6 +253,7 @@ export default function Expenses() {
                   <th className="px-4 py-3 text-left">Avser</th>
                   <th className="px-4 py-3 text-right">Belopp</th>
                   <th className="px-4 py-3 text-left">Annan valuta</th>
+                  <th className="px-4 py-3 text-center">Friskvård</th>
                   <th className="px-4 py-3 text-center">Klar</th>
                   <th className="px-4 py-3 text-left">Deltagare</th>
                   <th className="px-4 py-3 text-center">Kvitto</th>
@@ -274,6 +278,13 @@ export default function Expenses() {
                         : '—'}
                     </td>
                     <td className="px-4 py-2 text-gray-500 text-xs">{exp.annan_valuta || '—'}</td>
+                    <td className="px-4 py-2 text-center">
+                      {exp.friskvard ? (
+                        <span className="text-emerald-600 font-bold">✓</span>
+                      ) : (
+                        <span className="text-gray-300">—</span>
+                      )}
+                    </td>
                     <td className="px-4 py-2 text-center">
                       {exp.klar ? (
                         <span className="text-green-600 font-bold">✓</span>
@@ -330,7 +341,7 @@ export default function Expenses() {
                   <td className="px-4 py-3 text-right font-mono">
                     {total.toLocaleString('sv-SE', { minimumFractionDigits: 2 })}
                   </td>
-                  <td colSpan={isAdmin ? 5 : 5} />
+                  <td colSpan={isAdmin ? 6 : 6} />
                 </tr>
               </tfoot>
             </table>
@@ -404,7 +415,18 @@ export default function Expenses() {
               <Field label="Deltagare" className="col-span-2">
                 <input value={form.deltagare} onChange={e => f('deltagare', e.target.value)} className={inputCls} placeholder="Namn på deltagare" />
               </Field>
-              <Field label="Klar" className="col-span-2">
+              <Field label="Friskvårdskvitto">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={form.friskvard}
+                    onChange={e => f('friskvard', e.target.checked)}
+                    className="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+                  />
+                  <span className="text-sm text-gray-700">Friskvårdskvitto</span>
+                </label>
+              </Field>
+              <Field label="Klar">
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input
                     type="checkbox"

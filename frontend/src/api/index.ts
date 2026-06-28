@@ -59,6 +59,8 @@ export const salarySlipsApi = {
 export const expensesApi = {
   list: (params?: { year?: number; month?: number; userId?: number }) =>
     api.get('/expenses', { params }).then(r => r.data),
+  friskvard: (params?: { year?: number; userId?: number }) =>
+    api.get('/expenses/friskvard', { params }).then(r => r.data),
   create: (data: any) => api.post('/expenses', data).then(r => r.data),
   update: (id: number, data: any) => api.put(`/expenses/${id}`, data).then(r => r.data),
   delete: (id: number) => api.delete(`/expenses/${id}`).then(r => r.data),

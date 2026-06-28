@@ -123,9 +123,34 @@ Returnera endast JSON, ingen förklaring.`,
   }
 });
 
+// GET /api/expenses/friskvard — yearly summary of friskvård expenses
+router.get('/friskvard', (req: Request, res: Response): void => {
+  const { year, userId } = req.query;
+  const isAdmin = req.user!.role === 'admin';
+
+  let query = `SELECT e.year, e.month, e.id, e.nr, e.inkops_stalle, e.avser, e.belopp, e.receipt_filename,
+                      u.name as employee_name, u.employee_number
+               FROM expenses e JOIN users u ON e.user_id = u.id
+               WHERE e.friskvard = 1`;
+  const params: any[] = [];
+
+  if (!isAdmin) {
+    query += ` AND e.user_id = ?`;
+    params.push(req.user!.id);
+  } else if (userId) {
+    query += ` AND e.user_id = ?`;
+    params.push(userId);
+  }
+
+  if (year) { query += ` AND e.year = ?`; params.push(year); }
+  query += ` ORDER BY e.year DESC, e.month ASC, e.nr ASC`;
+
+  res.json(db.prepare(query).all(params));
+});
+
 // POST /api/expenses
 router.post('/', (req: Request, res: Response): void => {
-  const { year, month, inkops_stalle, avser, belopp, annan_valuta, klar, deltagare, receipt_filename } = req.body;
+  const { year, month, inkops_stalle, avser, belopp, annan_valuta, klar, deltagare, receipt_filename, friskvard } = req.body;
 
   if (!year || !month) {
     res.status(400).json({ error: 'year och month krävs' });
@@ -137,8 +162,8 @@ router.post('/', (req: Request, res: Response): void => {
   ).get([req.user!.id, year, month]) as any;
 
   const result = db.prepare(`
-    INSERT INTO expenses (user_id, year, month, nr, inkops_stalle, avser, belopp, annan_valuta, klar, deltagare, receipt_filename)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO expenses (user_id, year, month, nr, inkops_stalle, avser, belopp, annan_valuta, klar, deltagare, receipt_filename, friskvard)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run([
     req.user!.id, year, month, c + 1,
     inkops_stalle || null, avser || null,
@@ -147,6 +172,7 @@ router.post('/', (req: Request, res: Response): void => {
     klar ? 1 : 0,
     deltagare || null,
     receipt_filename || null,
+    friskvard ? 1 : 0,
   ]);
 
   res.status(201).json(db.prepare('SELECT * FROM expenses WHERE id = ?').get([result.lastInsertRowid]));
@@ -163,10 +189,10 @@ router.put('/:id', (req: Request, res: Response): void => {
     return;
   }
 
-  const { inkops_stalle, avser, belopp, annan_valuta, klar, deltagare, receipt_filename } = req.body;
+  const { inkops_stalle, avser, belopp, annan_valuta, klar, deltagare, receipt_filename, friskvard } = req.body;
 
   db.prepare(`
-    UPDATE expenses SET inkops_stalle = ?, avser = ?, belopp = ?, annan_valuta = ?, klar = ?, deltagare = ?, receipt_filename = ?
+    UPDATE expenses SET inkops_stalle = ?, avser = ?, belopp = ?, annan_valuta = ?, klar = ?, deltagare = ?, receipt_filename = ?, friskvard = ?
     WHERE id = ?
   `).run([
     inkops_stalle !== undefined ? inkops_stalle : expense.inkops_stalle,
@@ -176,6 +202,7 @@ router.put('/:id', (req: Request, res: Response): void => {
     klar !== undefined ? (klar ? 1 : 0) : expense.klar,
     deltagare !== undefined ? deltagare : expense.deltagare,
     receipt_filename !== undefined ? receipt_filename : expense.receipt_filename,
+    friskvard !== undefined ? (friskvard ? 1 : 0) : expense.friskvard,
     req.params.id,
   ]);
 

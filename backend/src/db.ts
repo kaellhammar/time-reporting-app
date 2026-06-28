@@ -133,3 +133,4 @@ export default db;
 
 // Migration: add assignment column to time_entries
 try { db.exec('ALTER TABLE time_entries ADD COLUMN assignment TEXT'); } catch (_) { /* already exists */ }
+try { db.exec('ALTER TABLE expenses ADD COLUMN friskvard INTEGER DEFAULT 0'); } catch (_) { /* already exists */ }
