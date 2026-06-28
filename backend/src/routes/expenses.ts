@@ -292,8 +292,9 @@ router.get('/export', async (req: Request, res: Response): Promise<void> => {
       { key: 'D', width: 30 },
       { key: 'E', width: 14 },
       { key: 'F', width: 16 },
-      { key: 'G', width: 8 },
-      { key: 'H', width: 28 },
+      { key: 'G', width: 10 },
+      { key: 'H', width: 8 },
+      { key: 'I', width: 28 },
     ];
 
     const titleStyle: Partial<ExcelJS.Style> = {
@@ -309,13 +310,13 @@ router.get('/export', async (req: Request, res: Response): Promise<void> => {
     };
 
     // Row 1: Title
-    ws.mergeCells('B1:H1');
+    ws.mergeCells('B1:I1');
     const titleCell = ws.getCell('B1');
     titleCell.value = 'KVITTOSAMMANSTÄLLNING';
     titleCell.style = titleStyle;
 
     // Row 2: Company
-    ws.mergeCells('B2:H2');
+    ws.mergeCells('B2:I2');
     ws.getCell('B2').value = 'Kaellhammarone AB';
     ws.getCell('B2').font = { bold: true };
 
@@ -334,10 +335,10 @@ router.get('/export', async (req: Request, res: Response): Promise<void> => {
     // Row 5: empty spacer
     ws.addRow([]);
 
-    // Row 6: Table header (columns B–H)
-    const headerRow = ws.addRow(['', 'Nr:', 'Inköpsställe', 'Avser:', 'Belopp:', 'Annan Valuta', 'Klar', 'Deltagare']);
+    // Row 6: Table header (columns B–I)
+    const headerRow = ws.addRow(['', 'Nr:', 'Inköpsställe', 'Avser:', 'Belopp:', 'Annan Valuta', 'Friskvård', 'Klar', 'Deltagare']);
     headerRow.height = 20;
-    for (let c = 2; c <= 8; c++) {
+    for (let c = 2; c <= 9; c++) {
       headerRow.getCell(c).style = headerStyle;
     }
     headerRow.getCell(5).alignment = { horizontal: 'right', vertical: 'middle' };
@@ -352,12 +353,16 @@ router.get('/export', async (req: Request, res: Response): Promise<void> => {
         exp.avser || '',
         exp.belopp != null ? exp.belopp : '',
         exp.annan_valuta || '',
+        exp.friskvard ? 'Ja' : '',
         exp.klar ? 'Ja' : '',
         exp.deltagare || '',
       ]);
       const bg = rowIndex % 2 === 0 ? 'FFF0F4F8' : 'FFFFFFFF';
-      for (let c = 2; c <= 8; c++) {
+      for (let c = 2; c <= 9; c++) {
         dataRow.getCell(c).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bg } };
+      }
+      if (exp.friskvard) {
+        dataRow.getCell(7).font = { bold: true, color: { argb: 'FF166534' } };
       }
       dataRow.getCell(5).numFmt = '#,##0.00';
       dataRow.getCell(5).alignment = { horizontal: 'right' };
@@ -367,14 +372,116 @@ router.get('/export', async (req: Request, res: Response): Promise<void> => {
     // Total row
     const firstDataRow = 7; // header at row 6, data starts at row 7
     const lastDataRow  = 6 + emp.rows.length;
-    const totalRow = ws.addRow(['', '', '', 'Totalt:', { formula: `SUM(E${firstDataRow}:E${lastDataRow})` }, '', '', '']);
+    const totalRow = ws.addRow(['', '', '', 'Totalt:', { formula: `SUM(E${firstDataRow}:E${lastDataRow})` }, '', '', '', '']);
     totalRow.getCell(4).font = { bold: true };
     totalRow.getCell(4).alignment = { horizontal: 'right' };
     totalRow.getCell(5).numFmt = '#,##0.00';
     totalRow.getCell(5).alignment = { horizontal: 'right' };
     totalRow.getCell(5).font = { bold: true };
-    for (let c = 2; c <= 8; c++) {
+    for (let c = 2; c <= 9; c++) {
       totalRow.getCell(c).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE8E8E8' } };
+    }
+  }
+
+  // Friskvård summary sheet — full year, regardless of month filter
+  if (year) {
+    let fvQuery = `SELECT e.user_id, e.month, e.inkops_stalle, e.avser, e.belopp,
+                          u.name as employee_name, u.employee_number
+                   FROM expenses e JOIN users u ON e.user_id = u.id
+                   WHERE e.friskvard = 1 AND e.year = ?`;
+    const fvParams: any[] = [year];
+    if (!isAdmin) { fvQuery += ` AND e.user_id = ?`; fvParams.push(req.user!.id); }
+    else if (userId) { fvQuery += ` AND e.user_id = ?`; fvParams.push(userId); }
+    fvQuery += ` ORDER BY e.user_id, e.month, e.id`;
+
+    const fvRows = db.prepare(fvQuery).all(fvParams) as any[];
+
+    if (fvRows.length > 0) {
+      const fvSheet = wb.addWorksheet('Friskvård');
+      fvSheet.columns = [
+        { key: 'A', width: 5 },
+        { key: 'B', width: 26 },
+        { key: 'C', width: 14 },
+        { key: 'D', width: 28 },
+        { key: 'E', width: 28 },
+        { key: 'F', width: 14 },
+      ];
+
+      const fvHeaderStyle: Partial<ExcelJS.Style> = {
+        font: { bold: true, color: { argb: 'FFFFFFFF' } },
+        fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF166534' } },
+        alignment: { vertical: 'middle' },
+      };
+
+      fvSheet.mergeCells('B1:F1');
+      const fvTitle = fvSheet.getCell('B1');
+      fvTitle.value = `FRISKVÅRD ${year}`;
+      fvTitle.style = { font: { bold: true, size: 14 } };
+
+      fvSheet.mergeCells('B2:F2');
+      fvSheet.getCell('B2').value = 'Kaellhammarone AB';
+      fvSheet.getCell('B2').font = { bold: true };
+      fvSheet.addRow([]);
+
+      // Group by employee
+      const fvByEmp = new Map<number, { name: string; number: string; rows: any[] }>();
+      for (const r of fvRows) {
+        if (!fvByEmp.has(r.user_id)) fvByEmp.set(r.user_id, { name: r.employee_name, number: r.employee_number, rows: [] });
+        fvByEmp.get(r.user_id)!.rows.push(r);
+      }
+
+      const MONTHS_SV2 = ['Januari','Februari','Mars','April','Maj','Juni',
+                          'Juli','Augusti','September','Oktober','November','December'];
+
+      let grandTotal = 0;
+      for (const [, emp] of fvByEmp) {
+        // Employee name row
+        const nameRow = fvSheet.addRow(['', emp.name + (emp.number ? `  (${emp.number})` : ''), '', '', '', '']);
+        nameRow.getCell(2).font = { bold: true, size: 11 };
+        fvSheet.mergeCells(`B${nameRow.number}:F${nameRow.number}`);
+
+        // Column header
+        const hdr = fvSheet.addRow(['', 'Månad', 'Inköpsställe', 'Avser', '', 'Belopp (SEK)']);
+        for (let c = 2; c <= 6; c++) hdr.getCell(c).style = fvHeaderStyle;
+        hdr.getCell(6).alignment = { horizontal: 'right', vertical: 'middle' };
+
+        const firstRow = fvSheet.rowCount + 1;
+        let idx = 0;
+        for (const r of emp.rows) {
+          const dr = fvSheet.addRow(['', MONTHS_SV2[r.month - 1], r.inkops_stalle || '', r.avser || '', '', r.belopp ?? '']);
+          fvSheet.mergeCells(`D${dr.number}:E${dr.number}`);
+          dr.getCell(6).numFmt = '#,##0.00';
+          dr.getCell(6).alignment = { horizontal: 'right' };
+          const bg = idx % 2 === 0 ? 'FFFFFFFF' : 'FFF0FDF4';
+          for (let c = 2; c <= 6; c++) dr.getCell(c).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bg } };
+          idx++;
+        }
+        const lastRow = fvSheet.rowCount;
+        const subtotal = emp.rows.reduce((s: number, r: any) => s + (r.belopp || 0), 0);
+        grandTotal += subtotal;
+
+        const subRow = fvSheet.addRow(['', '', '', '', 'Summa:', { formula: `SUM(F${firstRow}:F${lastRow})` }]);
+        subRow.getCell(5).font = { bold: true };
+        subRow.getCell(5).alignment = { horizontal: 'right' };
+        subRow.getCell(6).numFmt = '#,##0.00';
+        subRow.getCell(6).font = { bold: true };
+        subRow.getCell(6).alignment = { horizontal: 'right' };
+        for (let c = 2; c <= 6; c++) subRow.getCell(c).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD1FAE5' } };
+
+        fvSheet.addRow([]);
+      }
+
+      // Grand total (only meaningful when multiple employees)
+      if (fvByEmp.size > 1) {
+        const gtRow = fvSheet.addRow(['', '', '', '', 'TOTALT:', grandTotal]);
+        gtRow.getCell(5).font = { bold: true, size: 12 };
+        gtRow.getCell(5).alignment = { horizontal: 'right' };
+        gtRow.getCell(6).numFmt = '#,##0.00';
+        gtRow.getCell(6).font = { bold: true, size: 12 };
+        gtRow.getCell(6).alignment = { horizontal: 'right' };
+        for (let c = 2; c <= 6; c++) gtRow.getCell(c).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF166534' } };
+        for (let c = 2; c <= 6; c++) gtRow.getCell(c).font = { ...gtRow.getCell(c).font, color: { argb: 'FFFFFFFF' } };
+      }
     }
   }
 
